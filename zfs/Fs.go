@@ -1,4 +1,4 @@
-package main
+package zfs
 
 import (
 	"fmt"
@@ -6,34 +6,50 @@ import (
 	"strings"
 )
 
-type Fs struct {
+type Fs interface {
+	GetChild(desc string) (Fs, error)
+	MustGet(desc string) Fs
+	Get(desc string) (Fs, error)
+	String() string
+	AddSnapshot(desc string)
+	AddChild(desc string)
+}
+
+type fs struct {
 	zfs      Zfs
 	fullname string
 	name     string
-	children map[string]*Fs
+	children map[string]*fs
 	snaps    []string
 }
 
-func (f *Fs) MustGet(desc string) *Fs {
-	f, e := f.Get(desc)
-	if e != nil {
-		panic(e)
+func (f *fs) MustGet(desc string) Fs {
+	subFs, err := f.Get(desc)
+	if err != nil {
+		panic(err)
 	}
 
-	return f
+	return subFs
 }
 
-func (f *Fs) Get(desc string) (*Fs, error) {
+func (f *fs) Get(desc string) (Fs, error) {
+	return f.get(desc)
+}
+func (f *fs) get(desc string) (*fs, error) {
 	slash := strings.Index(desc, "/")
 	rootfsname := desc[0:slash]
 
 	if f.name == rootfsname {
-		return f.GetChild(desc[slash+1:])
+		return f.getChild(desc[slash+1:])
 	}
 	return nil, fmt.Errorf("Name mismatch: %s != %s", f.name, rootfsname)
 }
 
-func (f *Fs) GetChild(desc string) (*Fs, error) {
+func (f *fs) GetChild(desc string) (Fs, error) {
+	return f.getChild(desc)
+}
+
+func (f *fs) getChild(desc string) (*fs, error) {
 	// fmt.Printf("GetChild %s\n", desc)
 
 	slash := strings.Index(desc, "/")
@@ -47,14 +63,14 @@ func (f *Fs) GetChild(desc string) (*Fs, error) {
 	} else {
 		fsname = desc[0:slash]
 		if child, ok := f.children[fsname]; ok {
-			return child.GetChild(desc[slash+1:])
+			return child.getChild(desc[slash+1:])
 		} else {
 			return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
 		}
 	}
 }
 
-func (f *Fs) String() string {
+func (f *fs) String() string {
 	s := f.name + "\n"
 
 	for _, fs := range f.children {
@@ -64,7 +80,7 @@ func (f *Fs) String() string {
 	return s
 }
 
-func (f *Fs) doString(level int) string {
+func (f *fs) doString(level int) string {
 	s := fmt.Sprintf("%s -> %s\n", strings.Repeat("  ", level), f.name)
 	for _, snap := range f.snaps {
 		s = s + fmt.Sprintf("%s @> %s\n", strings.Repeat("  ", level+2), snap)
@@ -77,12 +93,12 @@ func (f *Fs) doString(level int) string {
 	return s
 }
 
-func (f *Fs) addSnapshot(desc string) {
+func (f *fs) AddSnapshot(desc string) {
 	comp := strings.Split(desc, "@")
 	name := comp[0]
 	snapname := comp[1]
 
-	fs, e := f.Get(name)
+	fs, e := f.get(name)
 	if e != nil {
 		panic(e)
 	} else {
@@ -90,7 +106,7 @@ func (f *Fs) addSnapshot(desc string) {
 	}
 }
 
-func (f *Fs) addChild(desc string) {
+func (f *fs) AddChild(desc string) {
 	components := strings.Split(desc, "/")[1:]
 	curf := f
 	for i, v := range components {
@@ -101,27 +117,32 @@ func (f *Fs) addChild(desc string) {
 			if len(components) != i+1 {
 				panic("error: should be equal")
 			}
-			n := NewFs(f.zfs, desc)
+			n := newFs(f.zfs, desc)
 			curf.children[v] = n
 		}
 	}
 }
 
-func NewFs(z Zfs, fullname string) *Fs {
+func NewFs(z Zfs, fullname string) Fs {
+	return newFs(z, fullname)
+}
+
+func newFs(z Zfs, fullname string) *fs {
 	components := strings.Split(fullname, "/")
 	name := components[len(components)-1]
 
-	return &Fs{
+	return &fs{
 		zfs:      z,
 		fullname: fullname,
 		name:     name,
-		children: make(map[string]*Fs),
+		children: make(map[string]*fs),
 		snaps:    []string{},
 	}
 }
-func (f *Fs) Recv(sendCommand *exec.Cmd) error {
+
+func (f *fs) Recv(sendCommand *exec.Cmd) error {
 	return f.zfs.Recv(f.fullname, sendCommand)
 }
-func (f *Fs) SendIncremental(prev, snap string) *exec.Cmd {
+func (f *fs) SendIncremental(prev, snap string) *exec.Cmd {
 	return f.zfs.SendIncremental(f.fullname, prev, snap)
 }

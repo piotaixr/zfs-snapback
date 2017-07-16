@@ -10,7 +10,7 @@ Note that
 Example:
 
 ```
-zfs-snapback root your.tld remote/zfs/fs/path local/fs/path
+zfs-snapback -u root -H your.tld -r remote/zfs/fs/path -l local/fs/path
 ```
 
 # What is not done (and will maybe come in the future)

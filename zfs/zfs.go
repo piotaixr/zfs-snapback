@@ -1,4 +1,4 @@
-package main
+package zfs
 
 import (
 	"bufio"
@@ -10,7 +10,7 @@ import (
 )
 
 type Zfs interface {
-	List() *Fs
+	List() Fs
 	Recv(fs string, sendCommand *exec.Cmd) error
 	SendIncremental(fs, prev, snap string) *exec.Cmd
 }
@@ -18,12 +18,16 @@ type Zfs interface {
 type zfs struct {
 }
 
-func (z *zfs) List() *Fs {
+func New() Zfs {
+	return &zfs{}
+}
+
+func (z *zfs) List() Fs {
 	cmd := exec.Command("/sbin/zfs", "list", "-t", "all", "-o", "name")
 	b, _ := cmd.Output()
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
-	var f *Fs
+	var f Fs
 	scanner.Scan() // Discarding first row as it is the name of the column
 	for scanner.Scan() {
 		l := scanner.Text()
@@ -36,9 +40,9 @@ func (z *zfs) List() *Fs {
 			f = NewFs(z, l)
 		} else {
 			if isSnap {
-				f.addSnapshot(l)
+				f.AddSnapshot(l)
 			} else {
-				f.addChild(l)
+				f.AddChild(l)
 			}
 		}
 
@@ -87,13 +91,20 @@ type remoteZfs struct {
 	user string
 }
 
-func (z *remoteZfs) List() *Fs {
+func NewRemote(host string, user string) Zfs {
+	return &remoteZfs{
+		host: host,
+		user: user,
+	}
+}
+
+func (z *remoteZfs) List() Fs {
 	dialstring := fmt.Sprintf("%s@%s", z.user, z.host)
 	cmd := exec.Command("/usr/bin/ssh", dialstring, "/sbin/zfs", "list", "-t", "all", "-o", "name")
 	b, _ := cmd.Output()
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
-	var f *Fs
+	var f Fs
 	scanner.Scan() // Discarding first row as it is the name of the column
 	for scanner.Scan() {
 		l := scanner.Text()
@@ -106,9 +117,9 @@ func (z *remoteZfs) List() *Fs {
 			f = NewFs(z, l)
 		} else {
 			if isSnap {
-				f.addSnapshot(l)
+				f.AddSnapshot(l)
 			} else {
-				f.addChild(l)
+				f.AddChild(l)
 			}
 		}
 
@@ -128,4 +139,43 @@ func (z *remoteZfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
 	cmd := exec.Command("/usr/bin/ssh", dialstring, "-C", "/sbin/zfs", "send", "-i", prev, snapfqn)
 
 	return cmd
+}
+
+func DoSync(_from, _to Fs) {
+	from, _ := _from.(*fs) // Ugly, to remove
+	to, _ := _to.(*fs)     // Ugly, to remove
+
+	lastLocal := to.snaps[len(to.snaps)-1]
+
+	remoteIndex := indexOf(from.snaps, lastLocal)
+
+	missing := from.snaps[remoteIndex+1:]
+
+	if len(missing) == 0 {
+		fmt.Println("Nothing to do")
+		return
+	}
+
+	fmt.Printf("last: %s, remoteIndex: %d, %s\n", lastLocal, remoteIndex, missing)
+
+	prev := lastLocal
+
+	for _, snap := range missing {
+		err := to.Recv(from.SendIncremental(prev, snap))
+		if err != nil {
+			panic(err)
+		}
+		prev = snap
+
+	}
+}
+
+func indexOf(list []string, needle string) int {
+	for i, e := range list {
+		if e == needle {
+			return i
+		}
+	}
+
+	return -1
 }
