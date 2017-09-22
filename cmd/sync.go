@@ -85,14 +85,22 @@ func run(cmd *cobra.Command, args []string) {
 
 	fmt.Println("Listing local")
 	lz := zfs.NewLocal()
-	lf := lz.List()
+	lf, err := lz.List()
+	checkError(err)
 
 	fmt.Println("Listing remote")
 	rz := zfs.NewRemote(host, user)
-	rf := rz.List()
+	rf, err := rz.List()
+	checkError(err)
 
 	from := remoteFs
 	to := localFs
 
-	zfs.DoSync(rf.MustGet(from), lf.MustGet(to))
+	checkError(zfs.DoSync(rf.MustGet(from), lf.MustGet(to)))
+}
+
+func checkError(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

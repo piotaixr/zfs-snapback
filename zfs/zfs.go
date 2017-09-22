@@ -27,23 +27,32 @@ func NewRemote(host string, user string) *Zfs {
 }
 
 // List returns all ZFS volumes and snapshots
-func (z *Zfs) List() Fs {
+func (z *Zfs) List() (Fs, error) {
 	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-o", "name")
-	b, _ := cmd.Output()
+	b, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
 	return z.parseList(b)
 }
 
-func (z *Zfs) parseList(b []byte) Fs {
+func (z *Zfs) parseList(b []byte) (Fs, error) {
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	var f Fs
-	scanner.Scan() // Discarding first row as it is the name of the column
+	scanner.Scan()
+
+	l := scanner.Text()
+	if l != "NAME" {
+		return nil, fmt.Errorf("First line should be NAME: %s", l)
+	}
+
 	for scanner.Scan() {
 		l := scanner.Text()
 		isSnap := strings.Contains(l, "@")
 		if f == nil {
 			if isSnap {
-				panic("First element should not be snapshot. Error.")
+				return nil, fmt.Errorf("First element should not be snapshot: %s", l)
 			}
 
 			f = NewFs(z, l)
@@ -57,7 +66,7 @@ func (z *Zfs) parseList(b []byte) Fs {
 
 	}
 
-	return f
+	return f, nil
 }
 
 func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
@@ -97,7 +106,7 @@ func (z *Zfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
 	return z.exec("/sbin/zfs", "send", "-i", prev, snapfqn)
 }
 
-func DoSync(_from, _to Fs) {
+func DoSync(_from, _to Fs) error {
 	from, _ := _from.(*fs) // Ugly, to remove
 	to, _ := _to.(*fs)     // Ugly, to remove
 
@@ -109,7 +118,7 @@ func DoSync(_from, _to Fs) {
 
 	if len(missing) == 0 {
 		fmt.Println("Nothing to do")
-		return
+		return nil
 	}
 
 	fmt.Printf("last: %s, remoteIndex: %d, %s\n", lastLocal, remoteIndex, missing)
@@ -119,11 +128,13 @@ func DoSync(_from, _to Fs) {
 	for _, snap := range missing {
 		err := to.Recv(from.SendIncremental(prev, snap))
 		if err != nil {
-			panic(err)
+			return err
 		}
 		prev = snap
 
 	}
+
+	return nil
 }
 
 func indexOf(list []string, needle string) int {
