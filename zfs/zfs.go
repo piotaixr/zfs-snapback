@@ -22,7 +22,7 @@ func NewLocal() *Zfs {
 // NewRemote creates a wrapper for remote ZFS commands
 func NewRemote(host string, user string) *Zfs {
 	return &Zfs{
-		exec: RemoteExecutor(fmt.Sprintf("%s@%s", host, user)),
+		exec: RemoteExecutor(fmt.Sprintf("%s@%s", user, host)),
 	}
 }
 
