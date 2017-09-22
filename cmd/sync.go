@@ -84,7 +84,7 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 
 	fmt.Println("Listing local")
-	lz := zfs.New()
+	lz := zfs.NewLocal()
 	lf := lz.List()
 
 	fmt.Println("Listing remote")

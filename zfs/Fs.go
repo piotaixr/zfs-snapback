@@ -16,7 +16,7 @@ type Fs interface {
 }
 
 type fs struct {
-	zfs      Zfs
+	zfs      *Zfs
 	fullname string
 	name     string
 	children map[string]*fs
@@ -123,11 +123,11 @@ func (f *fs) AddChild(desc string) {
 	}
 }
 
-func NewFs(z Zfs, fullname string) Fs {
+func NewFs(z *Zfs, fullname string) Fs {
 	return newFs(z, fullname)
 }
 
-func newFs(z Zfs, fullname string) *fs {
+func newFs(z *Zfs, fullname string) *fs {
 	components := strings.Split(fullname, "/")
 	name := components[len(components)-1]
 
