@@ -2,39 +2,57 @@ package zfs
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 )
 
-type Zfs interface {
-	List() Fs
-	Recv(fs string, sendCommand *exec.Cmd) error
-	SendIncremental(fs, prev, snap string) *exec.Cmd
+type Zfs struct {
+	exec Exec
 }
 
-type zfs struct {
+// NewLocal creates a wrapper for local ZFS commands
+func NewLocal() *Zfs {
+	return &Zfs{
+		exec: LocalExec,
+	}
 }
 
-func New() Zfs {
-	return &zfs{}
+// NewRemote creates a wrapper for remote ZFS commands
+func NewRemote(host string, user string) *Zfs {
+	return &Zfs{
+		exec: RemoteExecutor(fmt.Sprintf("%s@%s", user, host)),
+	}
 }
 
-func (z *zfs) List() Fs {
-	cmd := exec.Command("/sbin/zfs", "list", "-t", "all", "-o", "name")
-	b, _ := cmd.Output()
+// List returns all ZFS volumes and snapshots
+func (z *Zfs) List() (Fs, error) {
+	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-o", "name")
+	b, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	return z.parseList(b)
+}
+
+func (z *Zfs) parseList(b []byte) (Fs, error) {
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	var f Fs
-	scanner.Scan() // Discarding first row as it is the name of the column
+	scanner.Scan()
+
+	l := scanner.Text()
+	if l != "NAME" {
+		return nil, fmt.Errorf("First line should be NAME: %s", l)
+	}
+
 	for scanner.Scan() {
 		l := scanner.Text()
 		isSnap := strings.Contains(l, "@")
 		if f == nil {
 			if isSnap {
-				panic("First element should not be snapshot. Error.")
+				return nil, fmt.Errorf("First element should not be snapshot: %s", l)
 			}
 
 			f = NewFs(z, l)
@@ -48,10 +66,11 @@ func (z *zfs) List() Fs {
 
 	}
 
-	return f
+	return f, nil
 }
-func (z *zfs) Recv(fs string, sendCommand *exec.Cmd) error {
-	cmd := exec.Command("/sbin/zfs", "recv", fs)
+
+func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
+	cmd := z.exec("/sbin/zfs", "recv", fs)
 	in, _ := cmd.StdinPipe()
 	out, _ := sendCommand.StdoutPipe()
 
@@ -81,67 +100,13 @@ func (z *zfs) Recv(fs string, sendCommand *exec.Cmd) error {
 
 	return nil
 }
-func (z *zfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
-	panic("not implemented")
-	return nil
-}
 
-type remoteZfs struct {
-	host string
-	user string
-}
-
-func NewRemote(host string, user string) Zfs {
-	return &remoteZfs{
-		host: host,
-		user: user,
-	}
-}
-
-func (z *remoteZfs) List() Fs {
-	dialstring := fmt.Sprintf("%s@%s", z.user, z.host)
-	cmd := exec.Command("/usr/bin/ssh", dialstring, "/sbin/zfs", "list", "-t", "all", "-o", "name")
-	b, _ := cmd.Output()
-	s := string(b)
-	scanner := bufio.NewScanner(strings.NewReader(s))
-	var f Fs
-	scanner.Scan() // Discarding first row as it is the name of the column
-	for scanner.Scan() {
-		l := scanner.Text()
-		isSnap := strings.Contains(l, "@")
-		if f == nil {
-			if isSnap {
-				panic("First element should not be snapshot. Error.")
-			}
-
-			f = NewFs(z, l)
-		} else {
-			if isSnap {
-				f.AddSnapshot(l)
-			} else {
-				f.AddChild(l)
-			}
-		}
-
-	}
-
-	return f
-}
-
-func (z *remoteZfs) Recv(fs string, sendCommand *exec.Cmd) error {
-	panic("not implemented")
-	return errors.New("e")
-
-}
-func (z *remoteZfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
-	dialstring := fmt.Sprintf("%s@%s", z.user, z.host)
+func (z *Zfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
 	snapfqn := fmt.Sprintf("%s@%s", fs, snap)
-	cmd := exec.Command("/usr/bin/ssh", dialstring, "-C", "/sbin/zfs", "send", "-i", prev, snapfqn)
-
-	return cmd
+	return z.exec("/sbin/zfs", "send", "-i", prev, snapfqn)
 }
 
-func DoSync(_from, _to Fs) {
+func DoSync(_from, _to Fs) error {
 	from, _ := _from.(*fs) // Ugly, to remove
 	to, _ := _to.(*fs)     // Ugly, to remove
 
@@ -153,7 +118,7 @@ func DoSync(_from, _to Fs) {
 
 	if len(missing) == 0 {
 		fmt.Println("Nothing to do")
-		return
+		return nil
 	}
 
 	fmt.Printf("last: %s, remoteIndex: %d, %s\n", lastLocal, remoteIndex, missing)
@@ -163,11 +128,13 @@ func DoSync(_from, _to Fs) {
 	for _, snap := range missing {
 		err := to.Recv(from.SendIncremental(prev, snap))
 		if err != nil {
-			panic(err)
+			return err
 		}
 		prev = snap
 
 	}
+
+	return nil
 }
 
 func indexOf(list []string, needle string) int {

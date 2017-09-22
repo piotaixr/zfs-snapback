@@ -13,10 +13,11 @@ type Fs interface {
 	String() string
 	AddSnapshot(desc string)
 	AddChild(desc string)
+	Snapshots() []string
 }
 
 type fs struct {
-	zfs      Zfs
+	zfs      *Zfs
 	fullname string
 	name     string
 	children map[string]*fs
@@ -35,8 +36,12 @@ func (f *fs) MustGet(desc string) Fs {
 func (f *fs) Get(desc string) (Fs, error) {
 	return f.get(desc)
 }
+
 func (f *fs) get(desc string) (*fs, error) {
 	slash := strings.Index(desc, "/")
+	if slash == -1 {
+		return nil, fmt.Errorf("no slash found in '%s'", desc)
+	}
 	rootfsname := desc[0:slash]
 
 	if f.name == rootfsname {
@@ -123,11 +128,16 @@ func (f *fs) AddChild(desc string) {
 	}
 }
 
-func NewFs(z Zfs, fullname string) Fs {
+// Snapshots returns a list of all snapshots
+func (f *fs) Snapshots() []string {
+	return f.snaps
+}
+
+func NewFs(z *Zfs, fullname string) Fs {
 	return newFs(z, fullname)
 }
 
-func newFs(z Zfs, fullname string) *fs {
+func newFs(z *Zfs, fullname string) *fs {
 	components := strings.Split(fullname, "/")
 	name := components[len(components)-1]
 
