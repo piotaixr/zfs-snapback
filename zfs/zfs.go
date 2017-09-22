@@ -22,7 +22,7 @@ func NewLocal() *Zfs {
 // NewRemote creates a wrapper for remote ZFS commands
 func NewRemote(host string, user string) *Zfs {
 	return &Zfs{
-		exec: RemoteExec(fmt.Sprintf("%s@%s", host, user)),
+		exec: RemoteExecutor(fmt.Sprintf("%s@%s", host, user)),
 	}
 }
 
@@ -94,7 +94,7 @@ func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
 
 func (z *Zfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
 	snapfqn := fmt.Sprintf("%s@%s", fs, snap)
-	return z.exec("-C", "/sbin/zfs", "send", "-i", prev, snapfqn)
+	return z.exec("/sbin/zfs", "send", "-i", prev, snapfqn)
 }
 
 func DoSync(_from, _to Fs) {
