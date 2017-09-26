@@ -28,7 +28,7 @@ func NewRemote(host string, user string) *Zfs {
 
 // List returns all ZFS volumes and snapshots
 func (z *Zfs) List() (*Fs, error) {
-	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-o", "name")
+	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-Hr", "-o", "name")
 	b, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -40,12 +40,6 @@ func (z *Zfs) parseList(b []byte) (*Fs, error) {
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	var f *Fs
-	scanner.Scan()
-
-	l := scanner.Text()
-	if l != "NAME" {
-		return nil, fmt.Errorf("First line should be NAME: %s", l)
-	}
 
 	for scanner.Scan() {
 		l := scanner.Text()

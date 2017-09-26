@@ -24,21 +24,25 @@ func (f *Fs) MustGet(desc string) *Fs {
 }
 
 func (f *Fs) Get(desc string) (*Fs, error) {
-	slash := strings.Index(desc, "/")
-	if slash == -1 {
-		return nil, fmt.Errorf("no slash found in '%s'", desc)
-	}
-	rootfsname := desc[0:slash]
+	slash := strings.IndexRune(desc, '/')
 
-	if f.name == rootfsname {
-		return f.GetChild(desc[slash+1:])
+	if slash == -1 {
+		if f.name != desc {
+			return nil, fmt.Errorf("Name mismatch: %s != %s", f.name, desc)
+		}
+		return f, nil
 	}
-	return nil, fmt.Errorf("Name mismatch: %s != %s", f.name, rootfsname)
+
+	rootfsname := desc[0:slash]
+	if f.name != rootfsname {
+		return nil, fmt.Errorf("Name mismatch: %s != %s", f.name, rootfsname)
+	}
+
+	return f.GetChild(desc[slash+1:])
 }
 
 func (f *Fs) GetChild(desc string) (*Fs, error) {
-
-	slash := strings.Index(desc, "/")
+	slash := strings.IndexRune(desc, '/')
 	fsname := desc
 	if slash == -1 {
 		if child, ok := f.children[fsname]; ok {
@@ -52,6 +56,26 @@ func (f *Fs) GetChild(desc string) (*Fs, error) {
 		return child.GetChild(desc[slash+1:])
 	}
 	return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
+}
+
+func (f *Fs) CreateIfMissing(name string) (*Fs, error) {
+	if strings.ContainsRune(name, '/') {
+		panic("slashes not allowed in names: " + name)
+	}
+
+	if fs, _ := f.GetChild(name); fs != nil {
+		// exists already
+		return fs, nil
+	}
+
+	fullpath := f.fullname + "/" + name
+	if err := f.zfs.Create(fullpath); err != nil {
+		return nil, err
+	}
+
+	fs := NewFs(f.zfs, fullpath)
+	f.children[name] = fs
+	return fs, nil
 }
 
 func (f *Fs) String() string {
@@ -112,8 +136,11 @@ func (f *Fs) Snapshots() []string {
 }
 
 func NewFs(z *Zfs, fullname string) *Fs {
-	components := strings.Split(fullname, "/")
-	name := components[len(components)-1]
+	name := fullname
+
+	if i := strings.LastIndexByte(name, '/'); i != -1 {
+		name = name[i+1:]
+	}
 
 	return &Fs{
 		zfs:      z,
@@ -127,6 +154,11 @@ func NewFs(z *Zfs, fullname string) *Fs {
 func (f *Fs) Recv(sendCommand *exec.Cmd) error {
 	return f.zfs.Recv(f.fullname, sendCommand)
 }
+
 func (f *Fs) SendIncremental(prev, snap string) *exec.Cmd {
 	return f.zfs.SendIncremental(f.fullname, prev, snap)
+}
+
+func (f *Fs) Send(snap string) *exec.Cmd {
+	return f.zfs.Send(f.fullname, snap)
 }
