@@ -27,7 +27,7 @@ func NewRemote(host string, user string) *Zfs {
 }
 
 // List returns all ZFS volumes and snapshots
-func (z *Zfs) List() (Fs, error) {
+func (z *Zfs) List() (*Fs, error) {
 	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-o", "name")
 	b, err := cmd.Output()
 	if err != nil {
@@ -36,10 +36,10 @@ func (z *Zfs) List() (Fs, error) {
 	return z.parseList(b)
 }
 
-func (z *Zfs) parseList(b []byte) (Fs, error) {
+func (z *Zfs) parseList(b []byte) (*Fs, error) {
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
-	var f Fs
+	var f *Fs
 	scanner.Scan()
 
 	l := scanner.Text()
@@ -106,9 +106,7 @@ func (z *Zfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
 	return z.exec("/sbin/zfs", "send", "-i", prev, snapfqn)
 }
 
-func DoSync(_from, _to Fs) error {
-	from, _ := _from.(*fs) // Ugly, to remove
-	to, _ := _to.(*fs)     // Ugly, to remove
+func DoSync(from, to *Fs) error {
 
 	lastLocal := to.snaps[len(to.snaps)-1]
 
