@@ -37,24 +37,21 @@ func (f *Fs) Get(desc string) (*Fs, error) {
 }
 
 func (f *Fs) GetChild(desc string) (*Fs, error) {
-	// fmt.Printf("GetChild %s\n", desc)
 
 	slash := strings.Index(desc, "/")
 	fsname := desc
 	if slash == -1 {
 		if child, ok := f.children[fsname]; ok {
 			return child, nil
-		} else {
-			return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
 		}
-	} else {
-		fsname = desc[0:slash]
-		if child, ok := f.children[fsname]; ok {
-			return child.GetChild(desc[slash+1:])
-		} else {
-			return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
-		}
+		return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
 	}
+
+	fsname = desc[0:slash]
+	if child, ok := f.children[fsname]; ok {
+		return child.GetChild(desc[slash+1:])
+	}
+	return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
 }
 
 func (f *Fs) String() string {
@@ -97,7 +94,6 @@ func (f *Fs) AddChild(desc string) {
 	components := strings.Split(desc, "/")[1:]
 	curf := f
 	for i, v := range components {
-		// fmt.Println(v)
 		if val, ok := curf.children[v]; ok {
 			curf = val
 		} else {
