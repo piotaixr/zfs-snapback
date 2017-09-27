@@ -58,6 +58,8 @@ func (f *Fs) GetChild(desc string) (*Fs, error) {
 	return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
 }
 
+// CreateIfMissing creates a filesystem if it does not exist yet
+// The filesystem is returned if is exists or was created.
 func (f *Fs) CreateIfMissing(name string) (*Fs, error) {
 	if strings.ContainsRune(name, '/') {
 		panic("slashes not allowed in names: " + name)

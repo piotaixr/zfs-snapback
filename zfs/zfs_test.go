@@ -18,8 +18,12 @@ func TestParseList(t *testing.T) {
 	assert.NoError(err)
 	assert.NotNil(result)
 
-	fs, err := result.Get("doesnot/exist")
-	assert.EqualError(err, "Name mismatch: zroot != doesnot")
+	fs, err := result.Get("xx")
+	assert.EqualError(err, "Name mismatch: zroot != xx")
+	assert.Nil(fs)
+
+	fs, err = result.Get("zroot/doesnotexist")
+	assert.EqualError(err, "Unable to find doesnotexist in zroot")
 	assert.Nil(fs)
 
 	fs, err = result.Get("zroot/ROOT")
@@ -48,13 +52,4 @@ func TestParseList(t *testing.T) {
 	fs2, err := result.Get("zroot/var/cache")
 	assert.NoError(err)
 	assert.Equal(fs, fs2)
-}
-
-func TestParseListInvalid(t *testing.T) {
-	assert := assert.New(t)
-	zfs := Zfs{}
-	var err error
-
-	_, err = zfs.parseList([]byte("snap@shot"))
-	assert.EqualError(err, "First element should not be snapshot: snap@shot")
 }

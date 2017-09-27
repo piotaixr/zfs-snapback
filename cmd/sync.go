@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"fmt"
+	"os/exec"
 
 	"github.com/piotaixr/zfs-snapback/zfs"
 	"github.com/spf13/cobra"
@@ -93,14 +94,17 @@ func run(cmd *cobra.Command, args []string) {
 	rf, err := rz.List()
 	checkError(err)
 
-	from := remoteFs
-	to := localFs
+	remote := rf.MustGet(remoteFs)
+	local := lf.MustGet(localFs)
 
-	checkError(zfs.DoSync(rf.MustGet(from), lf.MustGet(to)))
+	checkError(zfs.DoSync(remote, local))
 }
 
 func checkError(err error) {
-	if err != nil {
+	switch err := err.(type) {
+	case *exec.ExitError:
+		panic(string(err.Stderr))
+	case error:
 		panic(err)
 	}
 }
