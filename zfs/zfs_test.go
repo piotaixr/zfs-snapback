@@ -53,3 +53,21 @@ func TestParseList(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(fs, fs2)
 }
+
+func TestParseLocation(t *testing.T) {
+	assert := assert.New(t)
+	var path string
+
+	locations := []string{
+		"foo/bar",
+		"remote:foo/bar",
+		"user@remote.host:foo/bar",
+		"user@[2001::dead:beef]:foo/bar",
+	}
+
+	for _, loc := range locations {
+		_, path = ParseLocation(loc)
+		// it's not possible to compare function pointers :(
+		assert.EqualValues("foo/bar", path, `for location "%s"`, loc)
+	}
+}

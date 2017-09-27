@@ -13,18 +13,32 @@ type Zfs struct {
 	exec Exec
 }
 
-// NewLocal creates a wrapper for local ZFS commands
-func NewLocal() *Zfs {
-	return &Zfs{
-		exec: LocalExec,
+func ParseLocation(location string) (z *Zfs, fspath string) {
+	colon := strings.LastIndexByte(location, ':')
+
+	if colon == -1 {
+		z = &Zfs{
+			exec: LocalExec,
+		}
+		fspath = location
+	} else {
+		z = &Zfs{
+			exec: RemoteExecutor(location[:colon]),
+		}
+		fspath = location[colon+1:]
 	}
+
+	return
 }
 
-// NewRemote creates a wrapper for remote ZFS commands
-func NewRemote(host string, user string) *Zfs {
-	return &Zfs{
-		exec: RemoteExecutor(fmt.Sprintf("%s@%s", user, host)),
+func GetFilesystem(location string) (*Fs, error) {
+	z, fspath := ParseLocation(location)
+	fs, err := z.List()
+	if err != nil {
+		return nil, err
 	}
+
+	return fs.Get(fspath)
 }
 
 // List returns all ZFS volumes and snapshots

@@ -14,15 +14,6 @@ type Fs struct {
 	snaps    []string
 }
 
-func (f *Fs) MustGet(desc string) *Fs {
-	subFs, err := f.Get(desc)
-	if err != nil {
-		panic(err)
-	}
-
-	return subFs
-}
-
 func (f *Fs) Get(desc string) (*Fs, error) {
 	slash := strings.IndexRune(desc, '/')
 
