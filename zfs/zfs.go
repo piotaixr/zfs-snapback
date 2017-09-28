@@ -165,7 +165,7 @@ func DoSync(from, to *Fs) error {
 	}
 
 	// synchronize the children
-	for _, fromChild := range from.children {
+	for _, fromChild := range from.Children() {
 
 		// ensure the filesystem exists
 		toChild, err := to.CreateIfMissing(fromChild.name)

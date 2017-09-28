@@ -3,6 +3,7 @@ package zfs
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -30,6 +31,19 @@ func (f *Fs) Get(desc string) (*Fs, error) {
 	}
 
 	return f.GetChild(desc[slash+1:])
+}
+
+// Children returns a sorted list of direct children
+func (f *Fs) Children() (children []*Fs) {
+	for _, child := range f.children {
+		children = append(children, child)
+	}
+
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].name < children[j].name
+	})
+
+	return children
 }
 
 func (f *Fs) GetChild(desc string) (*Fs, error) {
