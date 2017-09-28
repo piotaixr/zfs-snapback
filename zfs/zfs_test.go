@@ -2,6 +2,7 @@ package zfs
 
 import (
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,4 +69,28 @@ func TestParseLocation(t *testing.T) {
 		// it's not possible to compare function pointers :(
 		assert.EqualValues("foo/bar", path, `for location "%s"`, loc)
 	}
+}
+
+func TestLastCommonSnapshotIndex(t *testing.T) {
+	assert := assert.New(t)
+
+	tests := []struct {
+		listA    string
+		listB    string
+		expected int
+	}{
+		{"", "b c d", -1},
+		{"a", "b c", -1},
+		{"a", "a b", 0},
+		{"a b", "a b", 1},
+		{"a b c d", "b c d e f", 3},
+	}
+
+	for _, test := range tests {
+		assert.Equal(test.expected, lastCommonSnapshotIndex(
+			strings.Split(test.listA, " "),
+			strings.Split(test.listB, " "),
+		), `A="%s" B="%s"`, test.listA, test.listB)
+	}
+
 }
