@@ -2,6 +2,7 @@ package zfs
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -49,24 +50,22 @@ func (z *Zfs) List() (*Fs, error) {
 	if err != nil {
 		return nil, err
 	}
-	return z.parseList(b)
+	return z.parseList(b), nil
 }
 
-func (z *Zfs) parseList(b []byte) (*Fs, error) {
-	s := string(b)
-	scanner := bufio.NewScanner(strings.NewReader(s))
-	f := newFs(z, "")
+func (z *Zfs) parseList(b []byte) *Fs {
+	root := newFs(z, "")
+	scanner := bufio.NewScanner(bytes.NewReader(b))
 
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.ContainsRune(line, '@') {
-			f.addSnapshot(line)
+			root.addSnapshot(line)
 		} else {
-			f.addChild(line)
+			root.addChild(line)
 		}
 	}
-
-	return f, nil
+	return root
 }
 
 // Create creates a new filesystem by its full path

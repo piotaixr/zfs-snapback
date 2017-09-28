@@ -14,9 +14,7 @@ func TestParseList(t *testing.T) {
 	assert.NoError(err)
 
 	zfs := Zfs{}
-	result, err := zfs.parseList(data)
-	assert.NoError(err)
-	assert.NotNil(result)
+	result := zfs.parseList(data)
 
 	fs, err := result.GetChild("xx")
 	assert.EqualError(err, "Unable to find xx")
