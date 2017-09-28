@@ -38,7 +38,7 @@ func GetFilesystem(location string) (*Fs, error) {
 		return nil, err
 	}
 
-	return fs.Get(fspath)
+	return fs.GetChild(fspath)
 }
 
 // List returns all ZFS volumes and snapshots
@@ -54,20 +54,15 @@ func (z *Zfs) List() (*Fs, error) {
 func (z *Zfs) parseList(b []byte) (*Fs, error) {
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
-	var f *Fs
+	f := NewFs(z, "")
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		if f == nil {
-			f = NewFs(z, line)
+		if strings.ContainsRune(line, '@') {
+			f.addSnapshot(line)
 		} else {
-			if strings.ContainsRune(line, '@') {
-				f.AddSnapshot(line)
-			} else {
-				f.AddChild(line)
-			}
+			f.addChild(line)
 		}
-
 	}
 
 	return f, nil

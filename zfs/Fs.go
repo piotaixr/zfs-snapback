@@ -7,30 +7,13 @@ import (
 	"strings"
 )
 
+// Fs represents a file system
 type Fs struct {
 	zfs      *Zfs
 	fullname string
 	name     string
 	children map[string]*Fs
 	snaps    []string
-}
-
-func (f *Fs) Get(desc string) (*Fs, error) {
-	slash := strings.IndexRune(desc, '/')
-
-	if slash == -1 {
-		if f.name != desc {
-			return nil, fmt.Errorf("Name mismatch: %s != %s", f.name, desc)
-		}
-		return f, nil
-	}
-
-	rootfsname := desc[0:slash]
-	if f.name != rootfsname {
-		return nil, fmt.Errorf("Name mismatch: %s != %s", f.name, rootfsname)
-	}
-
-	return f.GetChild(desc[slash+1:])
 }
 
 // Children returns a sorted list of direct children
@@ -46,21 +29,30 @@ func (f *Fs) Children() (children []*Fs) {
 	return children
 }
 
-func (f *Fs) GetChild(desc string) (*Fs, error) {
-	slash := strings.IndexRune(desc, '/')
-	fsname := desc
-	if slash == -1 {
-		if child, ok := f.children[fsname]; ok {
-			return child, nil
+// GetChild searches the filesystem with the given path recursively and returns it
+func (f *Fs) GetChild(fspath string) (*Fs, error) {
+	var fsname string
+	slash := strings.IndexByte(fspath, '/')
+	if slash != -1 {
+		fsname = fspath[0:slash]
+	} else {
+		fsname = fspath
+	}
+
+	child, _ := f.children[fsname]
+	if child == nil {
+		if f.fullname == "" {
+			return nil, fmt.Errorf("Unable to find %s", fsname)
 		}
 		return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
 	}
 
-	fsname = desc[0:slash]
-	if child, ok := f.children[fsname]; ok {
-		return child.GetChild(desc[slash+1:])
+	if slash != -1 {
+		// search recursively
+		return child.GetChild(fspath[slash+1:])
 	}
-	return nil, fmt.Errorf("Unable to find %s in %s", fsname, f.fullname)
+
+	return child, nil
 }
 
 // CreateIfMissing creates a filesystem if it does not exist yet
@@ -108,12 +100,12 @@ func (f *Fs) doString(level int) string {
 	return s
 }
 
-func (f *Fs) AddSnapshot(desc string) {
+func (f *Fs) addSnapshot(desc string) {
 	comp := strings.Split(desc, "@")
 	name := comp[0]
 	snapname := comp[1]
 
-	fs, e := f.Get(name)
+	fs, e := f.GetChild(name)
 	if e != nil {
 		panic(e)
 	} else {
@@ -121,8 +113,12 @@ func (f *Fs) AddSnapshot(desc string) {
 	}
 }
 
-func (f *Fs) AddChild(desc string) {
-	components := strings.Split(desc, "/")[1:]
+func (f *Fs) addChild(desc string) {
+	components := strings.Split(desc, "/")
+	if f.name != "" {
+		components = components[1:]
+	}
+
 	curf := f
 	for i, v := range components {
 		if val, ok := curf.children[v]; ok {

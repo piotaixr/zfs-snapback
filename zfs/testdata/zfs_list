@@ -7,3 +7,6 @@ zroot/var
 zroot/var/cache
 zroot/var/cache@friday
 zroot/var/log
+zpool
+zpool/foo
+zpool/foo/bar

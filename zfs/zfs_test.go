@@ -18,19 +18,19 @@ func TestParseList(t *testing.T) {
 	assert.NoError(err)
 	assert.NotNil(result)
 
-	fs, err := result.Get("xx")
-	assert.EqualError(err, "Name mismatch: zroot != xx")
+	fs, err := result.GetChild("xx")
+	assert.EqualError(err, "Unable to find xx")
 	assert.Nil(fs)
 
-	fs, err = result.Get("zroot/doesnotexist")
+	fs, err = result.GetChild("zroot/doesnotexist")
 	assert.EqualError(err, "Unable to find doesnotexist in zroot")
 	assert.Nil(fs)
 
-	fs, err = result.Get("zroot/ROOT")
+	fs, err = result.GetChild("zroot")
 	assert.NoError(err)
 	assert.NotNil(fs)
 
-	fs, err = result.GetChild("ROOT")
+	fs, err = fs.GetChild("ROOT")
 	assert.NoError(err)
 	assert.NotNil(fs)
 
@@ -39,7 +39,7 @@ func TestParseList(t *testing.T) {
 	assert.NotNil(fs)
 	assert.Equal([]string([]string{"2017-09-01T00:00", "2017-09-02T00:00"}), fs.Snapshots())
 
-	fs, err = result.GetChild("var")
+	fs, err = result.GetChild("zroot/var")
 	assert.NoError(err)
 	assert.NotNil(fs)
 	assert.Len(fs.Snapshots(), 0)
@@ -49,7 +49,7 @@ func TestParseList(t *testing.T) {
 	assert.NotNil(fs)
 	assert.Equal([]string([]string{"friday"}), fs.Snapshots())
 
-	fs2, err := result.Get("zroot/var/cache")
+	fs2, err := result.GetChild("zroot/var/cache")
 	assert.NoError(err)
 	assert.Equal(fs, fs2)
 }
