@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+// Zfs is a wrapper for local or remote ZFS commands
 type Zfs struct {
 	exec Exec
 }
@@ -54,7 +55,7 @@ func (z *Zfs) List() (*Fs, error) {
 func (z *Zfs) parseList(b []byte) (*Fs, error) {
 	s := string(b)
 	scanner := bufio.NewScanner(strings.NewReader(s))
-	f := NewFs(z, "")
+	f := newFs(z, "")
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -74,6 +75,7 @@ func (z *Zfs) Create(fs string) error {
 	return err
 }
 
+// Recv performs the `zfs recv` command
 func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
 	cmd := z.exec("/sbin/zfs", "recv", "-F", fs)
 	in, _ := cmd.StdinPipe()
@@ -106,10 +108,12 @@ func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
 	return nil
 }
 
+// Send performs the `zfs send` command
 func (z *Zfs) Send(fs string, snap string) *exec.Cmd {
 	return z.exec("/sbin/zfs", "send", fmt.Sprintf("%s@%s", fs, snap))
 }
 
+// SendIncremental performs the `zfs send -i` command
 func (z *Zfs) SendIncremental(fs string, prev, current string) *exec.Cmd {
 	return z.exec("/sbin/zfs", "send", "-i",
 		fmt.Sprintf("@%s", prev),

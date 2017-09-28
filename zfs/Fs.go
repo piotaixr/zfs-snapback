@@ -16,6 +16,22 @@ type Fs struct {
 	snaps    []string
 }
 
+func newFs(z *Zfs, fullname string) *Fs {
+	name := fullname
+
+	if i := strings.LastIndexByte(name, '/'); i != -1 {
+		name = name[i+1:]
+	}
+
+	return &Fs{
+		zfs:      z,
+		fullname: fullname,
+		name:     name,
+		children: make(map[string]*Fs),
+		snaps:    []string{},
+	}
+}
+
 // Children returns a sorted list of direct children
 func (f *Fs) Children() (children []*Fs) {
 	for _, child := range f.children {
@@ -72,7 +88,7 @@ func (f *Fs) CreateIfMissing(name string) (*Fs, error) {
 		return nil, err
 	}
 
-	fs := NewFs(f.zfs, fullpath)
+	fs := newFs(f.zfs, fullpath)
 	f.children[name] = fs
 	return fs, nil
 }
@@ -127,7 +143,7 @@ func (f *Fs) addChild(desc string) {
 			if len(components) != i+1 {
 				panic("error: should be equal")
 			}
-			n := NewFs(f.zfs, desc)
+			n := newFs(f.zfs, desc)
 			curf.children[v] = n
 		}
 	}
@@ -138,30 +154,17 @@ func (f *Fs) Snapshots() []string {
 	return f.snaps
 }
 
-func NewFs(z *Zfs, fullname string) *Fs {
-	name := fullname
-
-	if i := strings.LastIndexByte(name, '/'); i != -1 {
-		name = name[i+1:]
-	}
-
-	return &Fs{
-		zfs:      z,
-		fullname: fullname,
-		name:     name,
-		children: make(map[string]*Fs),
-		snaps:    []string{},
-	}
-}
-
+// Recv performs the `zfs recv` command
 func (f *Fs) Recv(sendCommand *exec.Cmd) error {
 	return f.zfs.Recv(f.fullname, sendCommand)
 }
 
-func (f *Fs) SendIncremental(prev, snap string) *exec.Cmd {
-	return f.zfs.SendIncremental(f.fullname, prev, snap)
-}
-
+// Send performs the `zfs send` command
 func (f *Fs) Send(snap string) *exec.Cmd {
 	return f.zfs.Send(f.fullname, snap)
+}
+
+// SendIncremental performs the `zfs send -i` command
+func (f *Fs) SendIncremental(prev, snap string) *exec.Cmd {
+	return f.zfs.SendIncremental(f.fullname, prev, snap)
 }
