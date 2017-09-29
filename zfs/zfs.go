@@ -134,7 +134,7 @@ func lastCommonSnapshotIndex(listA, listB []string) int {
 }
 
 // DoSync create missing file systems on the destination and transfers missing snapshots
-func DoSync(from, to *Fs) error {
+func DoSync(from, to *Fs, recursive bool) error {
 	log.Println("Synchronize", from.fullname, "to", to.fullname)
 
 	// any snapshots to be transferred?
@@ -163,16 +163,18 @@ func DoSync(from, to *Fs) error {
 	}
 
 	// synchronize the children
-	for _, fromChild := range from.Children() {
+	if recursive {
+		for _, fromChild := range from.Children() {
 
-		// ensure the filesystem exists
-		toChild, err := to.CreateIfMissing(fromChild.name)
-		if err != nil {
-			return err
-		}
-		err = DoSync(fromChild, toChild)
-		if err != nil {
-			return err
+			// ensure the filesystem exists
+			toChild, err := to.CreateIfMissing(fromChild.name)
+			if err != nil {
+				return err
+			}
+			err = DoSync(fromChild, toChild, recursive)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
