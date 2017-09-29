@@ -165,6 +165,6 @@ func (f *Fs) Send(snap string) *exec.Cmd {
 }
 
 // SendIncremental performs the `zfs send -i` command
-func (f *Fs) SendIncremental(prev, snap string) *exec.Cmd {
-	return f.zfs.SendIncremental(f.fullname, prev, snap)
+func (f *Fs) SendIncremental(previous, current string) *exec.Cmd {
+	return f.zfs.SendIncremental(f.fullname, previous, current)
 }

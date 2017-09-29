@@ -113,9 +113,9 @@ func (z *Zfs) Send(fs string, snap string) *exec.Cmd {
 }
 
 // SendIncremental performs the `zfs send -i` command
-func (z *Zfs) SendIncremental(fs string, prev, current string) *exec.Cmd {
+func (z *Zfs) SendIncremental(fs string, previous, current string) *exec.Cmd {
 	return z.exec("/sbin/zfs", "send", "-i",
-		fmt.Sprintf("@%s", prev),
+		fmt.Sprintf("@%s", previous),
 		fmt.Sprintf("%s@%s", fs, current),
 	)
 }
@@ -142,21 +142,23 @@ func DoSync(from, to *Fs, recursive bool) error {
 		if len(to.snaps) > 0 {
 			common := lastCommonSnapshotIndex(from.snaps, to.snaps)
 
+			if common == -1 {
+				return fmt.Errorf("%s and %s don't have a common snapshot", from.fullname, to.fullname)
+			}
+
 			// incremental transfer of missing snapshots
-			current := from.snaps[common]
+			previous := from.snaps[common]
 			missing := from.snaps[common+1:]
 
-			for _, snap := range missing {
-				err := to.Recv(from.SendIncremental(current, snap))
-				if err != nil {
+			for _, current := range missing {
+				if err := to.Recv(from.SendIncremental(previous, current)); err != nil {
 					return err
 				}
-				current = snap
+				previous = current
 			}
 		} else {
 			// transfer the first snapshot
-			err := to.Recv(from.Send(from.snaps[0]))
-			if err != nil {
+			if err := to.Recv(from.Send(from.snaps[0])); err != nil {
 				return err
 			}
 		}
