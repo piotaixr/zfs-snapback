@@ -1,12 +1,15 @@
 # zfs-snapback
-Small utility in Go to synchronize snapshots recursively a source to a destination.
+Small utility in Go to synchronize snapshots recursively from a source to a destination.
 Both source and destination can be a remote or local file system.
 
 # Usage
 Note that
 - the given FS should already be present on the destination.
 - You need SSH to be set up either via ssh agent or keyfile, user/password will not work
-- Destination file systems will be reverted to the most recent snapshot before receiving the data (`zfs recv -F`).
+
+Flags:
+- `--recursive` or `-r`: synchronize file systems recursively and create missing file systems on the destination.
+- `--force` or `-f`: revert file systems to the most recent snapshot before receiving the data (`zfs recv -F`).
 
 Examples:
 
