@@ -155,8 +155,8 @@ func (f *Fs) Snapshots() []string {
 }
 
 // Recv performs the `zfs recv` command
-func (f *Fs) Recv(sendCommand *exec.Cmd) error {
-	return f.zfs.Recv(f.fullname, sendCommand)
+func (f *Fs) Recv(sendCommand *exec.Cmd, force bool) error {
+	return f.zfs.Recv(f.fullname, sendCommand, force)
 }
 
 // Send performs the `zfs send` command

@@ -51,18 +51,21 @@ to quickly create a Cobra application.`,
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		checkError(zfs.DoSync(source, destination, recursive))
+		checkError(zfs.DoSync(source, destination, recursive, force))
 	},
 }
 
 var (
 	recursive   bool
+	force       bool
 	source      *zfs.Fs
 	destination *zfs.Fs
 )
 
 func init() {
 	syncCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Synchronize filesystems revursively")
+	syncCmd.Flags().BoolVarP(&force, "force", "f", false, "Force a rollback of the file system to the most recent snapshot before performing the receive operation.")
+
 	RootCmd.AddCommand(syncCmd)
 
 	// Here you will define your flags and configuration settings.

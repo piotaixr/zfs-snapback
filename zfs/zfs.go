@@ -75,8 +75,12 @@ func (z *Zfs) Create(fs string) error {
 }
 
 // Recv performs the `zfs recv` command
-func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
-	cmd := z.exec("/sbin/zfs", "recv", "-F", fs)
+func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd, force bool) error {
+	args := []string{"recv", fs}
+	if force {
+		args = append(args, "-F")
+	}
+	cmd := z.exec("/sbin/zfs", args...)
 	in, _ := cmd.StdinPipe()
 	out, _ := sendCommand.StdoutPipe()
 
@@ -134,7 +138,7 @@ func lastCommonSnapshotIndex(listA, listB []string) int {
 }
 
 // DoSync create missing file systems on the destination and transfers missing snapshots
-func DoSync(from, to *Fs, recursive bool) error {
+func DoSync(from, to *Fs, recursive, force bool) error {
 	log.Println("Synchronize", from.fullname, "to", to.fullname)
 
 	// any snapshots to be transferred?
@@ -151,14 +155,14 @@ func DoSync(from, to *Fs, recursive bool) error {
 			missing := from.snaps[common+1:]
 
 			for _, current := range missing {
-				if err := to.Recv(from.SendIncremental(previous, current)); err != nil {
+				if err := to.Recv(from.SendIncremental(previous, current), force); err != nil {
 					return err
 				}
 				previous = current
 			}
 		} else {
 			// transfer the first snapshot
-			if err := to.Recv(from.Send(from.snaps[0])); err != nil {
+			if err := to.Recv(from.Send(from.snaps[0]), force); err != nil {
 				return err
 			}
 		}
@@ -173,7 +177,7 @@ func DoSync(from, to *Fs, recursive bool) error {
 			if err != nil {
 				return err
 			}
-			err = DoSync(fromChild, toChild, recursive)
+			err = DoSync(fromChild, toChild, recursive, force)
 			if err != nil {
 				return err
 			}
