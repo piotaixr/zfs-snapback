@@ -1,16 +1,20 @@
 # zfs-snapback
-Small utility in Go to fetch back zfs snapshots from a remote server via SSH and zfs send/recv
+Small utility in Go to synchronize snapshots recursively a source to a destination.
+Both source and destination can be a remote or local file system.
 
 # Usage
 Note that
-- the FS should already be present locally, the program only transfers missing snapshots from the last present locally to the last present remotely.
+- the given FS should already be present on the destination.
 - You need SSH to be set up either via ssh agent or keyfile, user/password will not work
-- If you modify the destination FS, the recv command will fail. Putting the local FS readonly can be a good way to ensure that the content is not modified.
+- Destination file systems will be reverted to the most recent snapshot before receiving the data (`zfs recv -F`).
 
-Example:
+Examples:
 
 ```
-zfs-snapback -u root -H your.tld -r remote/zfs/fs/path -l local/fs/path
+zfs-snapback root@source.tld:remote/zfs/fs/path local/fs/path
+zfs-snapback one/local/fs another/local/fs
+zfs-snapback local/fs/path root@your.tld:remote/zfs/fs/path
+zfs-snapback root@source.tld:remote/zfs/fs/path root@destination.tld:zpool/backups/source.tld
 ```
 
 # What is not done (and will maybe come in the future)

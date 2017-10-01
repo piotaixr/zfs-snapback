@@ -1,6 +1,8 @@
 package zfs
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 // Exec executes a command
 type Exec func(string, ...string) *exec.Cmd

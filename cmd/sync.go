@@ -15,14 +15,11 @@ package cmd
 
 import (
 	"fmt"
+	"os/exec"
 
 	"github.com/piotaixr/zfs-snapback/zfs"
 	"github.com/spf13/cobra"
 )
-
-func pleaseSet(varname string) error {
-	return fmt.Errorf("Please provide a value for the parameter %s", varname)
-}
 
 // syncCmd represents the sync command
 var syncCmd = &cobra.Command{
@@ -34,39 +31,40 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Run: run,
+	Args:    cobra.ExactArgs(2),
+	Example: "zfs-snapback sync backup@remote.host:zpool/var zpool/backup/remote.host",
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if user == "" {
-			return pleaseSet("user")
+		var err error
+
+		// source
+		source, err = zfs.GetFilesystem(args[0])
+		if err != nil {
+			return fmt.Errorf("Invalid source: %s", args[0])
 		}
-		if host == "" {
-			return pleaseSet("host")
+
+		// source
+		destination, err = zfs.GetFilesystem(args[1])
+		if err != nil {
+			return fmt.Errorf("Invalid destination: %s", args[1])
 		}
-		if remoteFs == "" {
-			return pleaseSet("remote")
-		}
-		if localFs == "" {
-			return pleaseSet("local")
-		}
+
 		return nil
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		checkError(zfs.DoSync(source, destination, recursive, force))
 	},
 }
 
-var user string
-var host string
-var remoteFs string
-var localFs string
+var (
+	recursive   bool
+	force       bool
+	source      *zfs.Fs
+	destination *zfs.Fs
+)
 
 func init() {
-	syncCmd.PersistentFlags().StringVarP(&user, "user", "u", "", "Remote ssh user")
-	syncCmd.PersistentFlags().StringVarP(&host, "host", "H", "", "Remote host")
-	syncCmd.PersistentFlags().StringVarP(&remoteFs, "remote", "r", "", "Remote FS name")
-	syncCmd.PersistentFlags().StringVarP(&localFs, "local", "l", "", "Local FS name")
-
-	syncCmd.MarkPersistentFlagRequired("user")
-	syncCmd.MarkPersistentFlagRequired("host")
-	syncCmd.MarkPersistentFlagRequired("remote")
-	syncCmd.MarkPersistentFlagRequired("local")
+	syncCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Synchronize filesystems revursively")
+	syncCmd.Flags().BoolVarP(&force, "force", "f", false, "Force a rollback of the file system to the most recent snapshot before performing the receive operation.")
 
 	RootCmd.AddCommand(syncCmd)
 
@@ -81,26 +79,11 @@ func init() {
 	// syncCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func run(cmd *cobra.Command, args []string) {
-
-	fmt.Println("Listing local")
-	lz := zfs.NewLocal()
-	lf, err := lz.List()
-	checkError(err)
-
-	fmt.Println("Listing remote")
-	rz := zfs.NewRemote(host, user)
-	rf, err := rz.List()
-	checkError(err)
-
-	from := remoteFs
-	to := localFs
-
-	checkError(zfs.DoSync(rf.MustGet(from), lf.MustGet(to)))
-}
-
 func checkError(err error) {
-	if err != nil {
+	switch err := err.(type) {
+	case *exec.ExitError:
+		panic(string(err.Stderr))
+	case error:
 		panic(err)
 	}
 }

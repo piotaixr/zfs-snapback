@@ -2,79 +2,89 @@ package zfs
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"strings"
 )
 
+// Zfs is a wrapper for local or remote ZFS commands
 type Zfs struct {
 	exec Exec
 }
 
-// NewLocal creates a wrapper for local ZFS commands
-func NewLocal() *Zfs {
-	return &Zfs{
-		exec: LocalExec,
+func ParseLocation(location string) (z *Zfs, fspath string) {
+	colon := strings.LastIndexByte(location, ':')
+
+	if colon == -1 {
+		z = &Zfs{
+			exec: LocalExec,
+		}
+		fspath = location
+	} else {
+		z = &Zfs{
+			exec: RemoteExecutor(location[:colon]),
+		}
+		fspath = location[colon+1:]
 	}
+
+	return
 }
 
-// NewRemote creates a wrapper for remote ZFS commands
-func NewRemote(host string, user string) *Zfs {
-	return &Zfs{
-		exec: RemoteExecutor(fmt.Sprintf("%s@%s", user, host)),
+func GetFilesystem(location string) (*Fs, error) {
+	z, fspath := ParseLocation(location)
+	fs, err := z.List()
+	if err != nil {
+		return nil, err
 	}
+
+	return fs.GetChild(fspath)
 }
 
 // List returns all ZFS volumes and snapshots
-func (z *Zfs) List() (Fs, error) {
-	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-o", "name")
+func (z *Zfs) List() (*Fs, error) {
+	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-Hr", "-o", "name")
 	b, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
-	return z.parseList(b)
+	return z.parseList(b), nil
 }
 
-func (z *Zfs) parseList(b []byte) (Fs, error) {
-	s := string(b)
-	scanner := bufio.NewScanner(strings.NewReader(s))
-	var f Fs
-	scanner.Scan()
-
-	l := scanner.Text()
-	if l != "NAME" {
-		return nil, fmt.Errorf("First line should be NAME: %s", l)
-	}
+func (z *Zfs) parseList(b []byte) *Fs {
+	root := newFs(z, "")
+	scanner := bufio.NewScanner(bytes.NewReader(b))
 
 	for scanner.Scan() {
-		l := scanner.Text()
-		isSnap := strings.Contains(l, "@")
-		if f == nil {
-			if isSnap {
-				return nil, fmt.Errorf("First element should not be snapshot: %s", l)
-			}
-
-			f = NewFs(z, l)
+		line := scanner.Text()
+		if strings.ContainsRune(line, '@') {
+			root.addSnapshot(line)
 		} else {
-			if isSnap {
-				f.AddSnapshot(l)
-			} else {
-				f.AddChild(l)
-			}
+			root.addChild(line)
 		}
-
 	}
-
-	return f, nil
+	return root
 }
 
-func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
-	cmd := z.exec("/sbin/zfs", "recv", fs)
+// Create creates a new filesystem by its full path
+func (z *Zfs) Create(fs string) error {
+	_, err := z.exec("/sbin/zfs", "create", fs).Output()
+	return err
+}
+
+// Recv performs the `zfs recv` command
+func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd, force bool) error {
+	args := []string{"recv", fs}
+	if force {
+		args = append(args, "-F")
+	}
+	cmd := z.exec("/sbin/zfs", args...)
 	in, _ := cmd.StdinPipe()
 	out, _ := sendCommand.StdoutPipe()
 
-	fmt.Printf("Running %s | %s\n", strings.Join(sendCommand.Args, " "), strings.Join(cmd.Args, " "))
+	log.Printf("Running %s | %s\n", strings.Join(sendCommand.Args, " "), strings.Join(cmd.Args, " "))
 
 	go io.Copy(in, out)
 
@@ -101,37 +111,77 @@ func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd) error {
 	return nil
 }
 
-func (z *Zfs) SendIncremental(fs string, prev, snap string) *exec.Cmd {
-	snapfqn := fmt.Sprintf("%s@%s", fs, snap)
-	return z.exec("/sbin/zfs", "send", "-i", prev, snapfqn)
+// Send performs the `zfs send` command
+func (z *Zfs) Send(fs string, snap string) *exec.Cmd {
+	return z.exec("/sbin/zfs", "send", fmt.Sprintf("%s@%s", fs, snap))
 }
 
-func DoSync(_from, _to Fs) error {
-	from, _ := _from.(*fs) // Ugly, to remove
-	to, _ := _to.(*fs)     // Ugly, to remove
+// SendIncremental performs the `zfs send -i` command
+func (z *Zfs) SendIncremental(fs string, previous, current string) *exec.Cmd {
+	return z.exec("/sbin/zfs", "send", "-i",
+		fmt.Sprintf("@%s", previous),
+		fmt.Sprintf("%s@%s", fs, current),
+	)
+}
 
-	lastLocal := to.snaps[len(to.snaps)-1]
+// Returns the index of the last common snapshot
+func lastCommonSnapshotIndex(listA, listB []string) int {
+	result := -1
 
-	remoteIndex := indexOf(from.snaps, lastLocal)
-
-	missing := from.snaps[remoteIndex+1:]
-
-	if len(missing) == 0 {
-		fmt.Println("Nothing to do")
-		return nil
+	for i, name := range listA {
+		if indexOf(listB, name) != -1 {
+			result = i
+		}
 	}
 
-	fmt.Printf("last: %s, remoteIndex: %d, %s\n", lastLocal, remoteIndex, missing)
+	return result
+}
 
-	prev := lastLocal
+// DoSync create missing file systems on the destination and transfers missing snapshots
+func DoSync(from, to *Fs, recursive, force bool) error {
+	log.Println("Synchronize", from.fullname, "to", to.fullname)
 
-	for _, snap := range missing {
-		err := to.Recv(from.SendIncremental(prev, snap))
-		if err != nil {
-			return err
+	// any snapshots to be transferred?
+	if len(from.snaps) > 0 {
+		if len(to.snaps) > 0 {
+			common := lastCommonSnapshotIndex(from.snaps, to.snaps)
+
+			if common == -1 {
+				return fmt.Errorf("%s and %s don't have a common snapshot", from.fullname, to.fullname)
+			}
+
+			// incremental transfer of missing snapshots
+			previous := from.snaps[common]
+			missing := from.snaps[common+1:]
+
+			for _, current := range missing {
+				if err := to.Recv(from.SendIncremental(previous, current), force); err != nil {
+					return err
+				}
+				previous = current
+			}
+		} else {
+			// transfer the first snapshot
+			if err := to.Recv(from.Send(from.snaps[0]), force); err != nil {
+				return err
+			}
 		}
-		prev = snap
+	}
 
+	// synchronize the children
+	if recursive {
+		for _, fromChild := range from.Children() {
+
+			// ensure the filesystem exists
+			toChild, err := to.CreateIfMissing(fromChild.name)
+			if err != nil {
+				return err
+			}
+			err = DoSync(fromChild, toChild, recursive, force)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
