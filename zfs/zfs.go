@@ -76,10 +76,15 @@ func (z *Zfs) Create(fs string) error {
 
 // Recv performs the `zfs recv` command
 func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd, force bool) error {
-	args := []string{"recv", fs}
+
+	// Build argument list
+	args := []string{"recv"}
 	if force {
+		// -F must be passed before the filesystem argument
 		args = append(args, "-F")
 	}
+	args = append(args, fs)
+
 	cmd := z.exec("/sbin/zfs", args...)
 	in, _ := cmd.StdinPipe()
 	out, _ := sendCommand.StdoutPipe()
