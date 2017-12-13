@@ -8,6 +8,7 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 // Zfs is a wrapper for local or remote ZFS commands
@@ -85,35 +86,48 @@ func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd, force bool) error {
 	}
 	args = append(args, fs)
 
-	cmd := z.exec("/sbin/zfs", args...)
-	in, _ := cmd.StdinPipe()
+	recvCommand := z.exec("/sbin/zfs", args...)
+	in, _ := recvCommand.StdinPipe()
 	out, _ := sendCommand.StdoutPipe()
 
-	log.Printf("Running %s | %s\n", strings.Join(sendCommand.Args, " "), strings.Join(cmd.Args, " "))
+	log.Printf("Running %s | %s\n", strings.Join(sendCommand.Args, " "), strings.Join(recvCommand.Args, " "))
 
+	var err error
+	mtx := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+
+	// Start copy routine
 	go io.Copy(in, out)
 
-	err := sendCommand.Start()
-	if err != nil {
-		return err
+	// executes a command and closes the closer on failure
+	run := func(cmd *exec.Cmd, closer io.Closer) {
+		// capture stderr
+		var stdErr bytes.Buffer
+		cmd.Stderr = &stdErr
+
+		// run the command
+		if e := cmd.Run(); e != nil {
+			mtx.Lock()
+			defer mtx.Unlock()
+
+			if err == nil {
+				// It is the first failed process
+				err = fmt.Errorf("%s failed with %v: %s", cmd.Args, e, stdErr.String())
+			}
+
+			// ensure the other process terminates
+			closer.Close()
+		}
+		wg.Done()
 	}
 
-	err = cmd.Start()
-	if err != nil {
-		return err
-	}
+	// Start processes
+	go run(recvCommand, out)
+	go run(sendCommand, in)
 
-	err = sendCommand.Wait()
-	if err != nil {
-		return err
-	}
-
-	err = cmd.Wait()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	wg.Wait()
+	return err
 }
 
 // Send performs the `zfs send` command
