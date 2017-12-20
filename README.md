@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/piotaixr/zfs-snapback.svg?branch=master)](https://travis-ci.org/piotaixr/zfs-snapback)
+
 # zfs-snapback
 Small utility in Go to synchronize snapshots recursively from a source to a destination.
 Both source and destination can be a remote or local file system.
