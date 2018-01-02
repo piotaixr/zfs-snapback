@@ -14,10 +14,10 @@
 package cmd
 
 import (
-	"fmt"
 	"os/exec"
 
 	"github.com/piotaixr/zfs-snapback/zfs"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -39,13 +39,13 @@ to quickly create a Cobra application.`,
 		// source
 		source, err = zfs.GetFilesystem(args[0])
 		if err != nil {
-			return fmt.Errorf("Invalid source '%s': %s", args[0], err)
+			return errors.Wrapf(err, "Invalid source '%s'", args[0])
 		}
 
 		// source
 		destination, err = zfs.GetFilesystem(args[1])
 		if err != nil {
-			return fmt.Errorf("Invalid destination '%s': %s", args[1], err)
+			return errors.Wrapf(err, "Invalid destination '%s'", args[1])
 		}
 
 		return nil
