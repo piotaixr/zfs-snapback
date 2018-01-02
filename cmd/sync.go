@@ -39,13 +39,13 @@ to quickly create a Cobra application.`,
 		// source
 		source, err = zfs.GetFilesystem(args[0])
 		if err != nil {
-			return fmt.Errorf("Invalid source: %s", args[0])
+			return fmt.Errorf("Invalid source '%s': %s", args[0], err)
 		}
 
 		// source
 		destination, err = zfs.GetFilesystem(args[1])
 		if err != nil {
-			return fmt.Errorf("Invalid destination: %s", args[1])
+			return fmt.Errorf("Invalid destination '%s': %s", args[1], err)
 		}
 
 		return nil
