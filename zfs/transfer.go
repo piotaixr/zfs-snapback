@@ -94,12 +94,19 @@ func (t *Transfer) Run() error {
 	wg := sync.WaitGroup{}
 	wg.Add(3)
 
+	// Start copy routine
 	go func() {
 		var e error
 		if t.Flags.Progress {
-			_, e = copyWithProgress(in, out, size)
+			bar := pb.New64(size).SetUnits(pb.U_BYTES)
+			bar.Start()
+			_, e = io.Copy(in, bar.NewProxyReader(out))
+			if e == nil {
+				// Set to 100% percent
+				bar.Set64(size)
+			}
+			bar.Finish()
 		} else {
-			// Start copy routine
 			_, e = io.Copy(in, out)
 		}
 		if e != nil {
@@ -196,39 +203,4 @@ func DoSync(from, to *Fs, flags Flags) error {
 	}
 
 	return nil
-}
-
-// copyBuffer is the actual implementation of Copy and CopyBuffer.
-// if buf is nil, one is allocated.
-func copyWithProgress(dst io.Writer, src io.Reader, total int64) (written int64, err error) {
-	bar := pb.New64(total)
-	bar.Start()
-	defer bar.Finish()
-
-	buf := make([]byte, 32*1024)
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			bar.Add(nw)
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er != nil {
-			if er != io.EOF {
-				err = er
-			}
-			break
-		}
-	}
-	return written, err
 }
