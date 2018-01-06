@@ -46,6 +46,11 @@ func (z *Zfs) List() (*Fs, error) {
 	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-Hr", "-o", "name")
 	b, err := cmd.Output()
 	if err != nil {
+		if e := err.(*exec.ExitError); e != nil && len(e.Stderr) > 0 {
+			// Add stderr to error message
+			err = fmt.Errorf("%s: %s", err, strings.TrimSpace(string(e.Stderr)))
+		}
+
 		return nil, err
 	}
 	return z.parseList(b), nil
