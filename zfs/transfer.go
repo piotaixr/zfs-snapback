@@ -93,7 +93,9 @@ func (t *Transfer) Run() error {
 	// copy routine
 	copy := func() {
 		if t.Flags.Progress {
-			bar := pb.New64(size).SetUnits(pb.U_BYTES)
+			bar := pb.New64(size)
+			bar.Units = pb.U_BYTES
+			bar.ShowSpeed = true
 			bar.Start()
 			if _, e := io.Copy(in, bar.NewProxyReader(out)); e == nil {
 				// Set to 100% percent
