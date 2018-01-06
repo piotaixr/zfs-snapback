@@ -72,67 +72,66 @@ func (t *Transfer) Run() error {
 
 	recvCommand := t.recv()
 	sendCommand := t.send()
+	recvCommand.Stderr = &bytes.Buffer{}
+	sendCommand.Stderr = &bytes.Buffer{}
 	in, _ := recvCommand.StdinPipe()
 	out, _ := sendCommand.StdoutPipe()
 
 	log.Printf("Running %s | %s\n", strings.Join(sendCommand.Args, " "), strings.Join(recvCommand.Args, " "))
 
-	mtx := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	wg.Add(3)
+	errMtx := sync.Mutex{}
+	setErr := func(e error, cmd *exec.Cmd) {
+		errMtx.Lock()
+		defer errMtx.Unlock()
 
-	// Start copy routine
-	go func() {
-		var e error
+		if err == nil {
+			// It is the first failed process
+			err = fmt.Errorf("%s failed with %v: %s", cmd.Args, e, cmd.Stderr.(*bytes.Buffer).String())
+		}
+	}
+
+	// copy routine
+	copy := func() {
 		if t.Flags.Progress {
 			bar := pb.New64(size).SetUnits(pb.U_BYTES)
 			bar.Start()
-			_, e = io.Copy(in, bar.NewProxyReader(out))
-			if e == nil {
+			if _, e := io.Copy(in, bar.NewProxyReader(out)); e == nil {
 				// Set to 100% percent
 				bar.Set64(size)
 			}
 			bar.Finish()
 		} else {
-			_, e = io.Copy(in, out)
+			io.Copy(in, out)
 		}
-		if e != nil {
-			mtx.Lock()
-			if err == nil {
-				err = e
-			}
-			mtx.Unlock()
-		}
-		wg.Done()
-	}()
-
-	// executes a command and closes the closer on failure
-	run := func(cmd *exec.Cmd, closer io.Closer) {
-		// capture stderr
-		var stdErr bytes.Buffer
-		cmd.Stderr = &stdErr
-
-		// run the command
-		if e := cmd.Run(); e != nil {
-			mtx.Lock()
-			defer mtx.Unlock()
-
-			if err == nil {
-				// It is the first failed process
-				err = fmt.Errorf("%s failed with %v: %s", cmd.Args, e, stdErr.String())
-			}
-
-			// ensure the other process terminates
-			closer.Close()
-		}
-		wg.Done()
 	}
 
-	// Start processes
-	go run(recvCommand, out)
-	go run(sendCommand, in)
+	// runs the recv command
+	recv := func() {
+		if e := recvCommand.Run(); e != nil {
+			setErr(e, recvCommand)
+			out.Close()
+		}
+	}
 
-	wg.Wait()
+	/*
+		The following order is important to avoid race conditions:
+		1. Starting the send process
+		2. Starting io.Copy() and the recv process
+		3. Waiting for any process to terminate
+	*/
+	e := sendCommand.Start()
+	if e != nil {
+		out.Close()
+	} else {
+		go recv()
+		copy()
+		e = sendCommand.Wait()
+	}
+
+	if e != nil {
+		setErr(e, sendCommand)
+	}
+
 	return err
 }
 
