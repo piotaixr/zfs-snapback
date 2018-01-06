@@ -13,7 +13,7 @@ type Zfs struct {
 	exec Exec
 }
 
-func ParseLocation(location string) (z *Zfs, fspath string) {
+func ParseLocation(flags Flags, location string) (z *Zfs, fspath string) {
 	colon := strings.LastIndexByte(location, ':')
 
 	if colon == -1 {
@@ -23,7 +23,7 @@ func ParseLocation(location string) (z *Zfs, fspath string) {
 		fspath = location
 	} else {
 		z = &Zfs{
-			exec: RemoteExecutor(location[:colon]),
+			exec: RemoteExecutor(flags, location[:colon]),
 		}
 		fspath = location[colon+1:]
 	}
@@ -31,8 +31,8 @@ func ParseLocation(location string) (z *Zfs, fspath string) {
 	return
 }
 
-func GetFilesystem(location string) (*Fs, error) {
-	z, fspath := ParseLocation(location)
+func GetFilesystem(flags Flags, location string) (*Fs, error) {
+	z, fspath := ParseLocation(flags, location)
 	fs, err := z.List()
 	if err != nil {
 		return nil, err

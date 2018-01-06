@@ -13,9 +13,14 @@ func LocalExec(name string, args ...string) *exec.Cmd {
 }
 
 // RemoteExecutor returns function that executes a command remotely via SSH
-func RemoteExecutor(dialstring string) Exec {
+func RemoteExecutor(flags Flags, dialstring string) Exec {
 	return func(name string, args ...string) *exec.Cmd {
-		// -C enables SSH compression
-		return exec.Command("/usr/bin/ssh", append([]string{"-C", dialstring, name}, args...)...)
+		args = append([]string{dialstring, name}, args...)
+
+		if flags.Compression != "" {
+			args = append([]string{"-o", "Compression=" + flags.Compression}, args...)
+		}
+
+		return exec.Command("/usr/bin/ssh", args...)
 	}
 }

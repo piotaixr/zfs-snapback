@@ -16,9 +16,10 @@ import (
 
 // Flags are options for a transfer process
 type Flags struct {
-	Recursive bool
-	Force     bool
-	Progress  bool
+	Recursive   bool
+	Force       bool
+	Progress    bool
+	Compression string
 }
 
 // Transfer is a set of arguments for transferring a single snapshot

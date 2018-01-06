@@ -37,13 +37,13 @@ to quickly create a Cobra application.`,
 		var err error
 
 		// source
-		source, err = zfs.GetFilesystem(args[0])
+		source, err = zfs.GetFilesystem(flags, args[0])
 		if err != nil {
 			return errors.Wrapf(err, "Invalid source '%s'", args[0])
 		}
 
 		// source
-		destination, err = zfs.GetFilesystem(args[1])
+		destination, err = zfs.GetFilesystem(flags, args[1])
 		if err != nil {
 			return errors.Wrapf(err, "Invalid destination '%s'", args[1])
 		}
@@ -62,9 +62,11 @@ var (
 )
 
 func init() {
-	syncCmd.Flags().BoolVarP(&flags.Recursive, "recursive", "r", false, "Synchronize filesystems revursively")
-	syncCmd.Flags().BoolVarP(&flags.Progress, "progress", "p", false, "Show progress")
-	syncCmd.Flags().BoolVarP(&flags.Force, "force", "f", false, "Force a rollback of the file system to the most recent snapshot before performing the receive operation.")
+	set := syncCmd.Flags()
+	set.BoolVarP(&flags.Recursive, "recursive", "r", false, "Synchronize filesystems revursively")
+	set.BoolVarP(&flags.Progress, "progress", "p", false, "Show progress")
+	set.BoolVarP(&flags.Force, "force", "f", false, "Force a rollback of the file system to the most recent snapshot before performing the receive operation.")
+	set.StringVarP(&flags.Compression, "compression", "c", "", "Set the compression option for SSH (yes/no)")
 
 	RootCmd.AddCommand(syncCmd)
 

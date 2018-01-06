@@ -65,7 +65,7 @@ func TestParseLocation(t *testing.T) {
 	}
 
 	for _, loc := range locations {
-		_, path = ParseLocation(loc)
+		_, path = ParseLocation(Flags{}, loc)
 		// it's not possible to compare function pointers :(
 		assert.EqualValues("foo/bar", path, `for location "%s"`, loc)
 	}
