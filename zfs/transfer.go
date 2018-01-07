@@ -6,11 +6,9 @@ import (
 	"io"
 	"log"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
 	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
@@ -57,20 +55,7 @@ func (t *Transfer) sendSize() (int64, error) {
 		return 0, err
 	}
 
-	buf := bytes.NewBuffer(out)
-	for {
-		line, err := buf.ReadString('\n')
-		if err != nil {
-			return 0, errors.Wrap(err, "unable to extract snapshot size")
-		}
-		if strings.HasPrefix(line, "size\t") {
-			i, err := strconv.ParseInt(line[5:len(line)-1], 10, 64)
-			if err != nil {
-				return 0, err
-			}
-			return i, nil
-		}
-	}
+	return parseTransferSize(out)
 }
 
 // Run performs sync

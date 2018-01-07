@@ -71,6 +71,21 @@ func TestParseLocation(t *testing.T) {
 	}
 }
 
+func TestParseTransferSize(t *testing.T) {
+	assert := assert.New(t)
+
+	data, err := ioutil.ReadFile("testdata/transfer_size")
+	assert.NoError(err)
+
+	size, err := parseTransferSize(data)
+	assert.NoError(err)
+	assert.EqualValues(10862046456, size)
+
+	size, err = parseTransferSize([]byte("foobar"))
+	assert.EqualError(err, "unable to extract snapshot size: EOF")
+	assert.EqualValues(0, size)
+}
+
 func TestLastCommonSnapshotIndex(t *testing.T) {
 	assert := assert.New(t)
 

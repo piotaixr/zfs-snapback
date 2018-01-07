@@ -5,7 +5,10 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // Zfs is a wrapper for local or remote ZFS commands
@@ -116,4 +119,21 @@ func indexOf(list []string, needle string) int {
 	}
 
 	return -1
+}
+
+func parseTransferSize(data []byte) (int64, error) {
+	buf := bytes.NewBuffer(data)
+	for {
+		line, err := buf.ReadString('\n')
+		if err != nil {
+			return 0, errors.Wrap(err, "unable to extract snapshot size")
+		}
+		if strings.HasPrefix(line, "size\t") {
+			i, err := strconv.ParseInt(line[5:len(line)-1], 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return i, nil
+		}
+	}
 }
