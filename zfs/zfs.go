@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
-	"log"
 	"os/exec"
+	"strconv"
 	"strings"
-	"sync"
+
+	"github.com/pkg/errors"
 )
 
 // Zfs is a wrapper for local or remote ZFS commands
@@ -16,7 +16,7 @@ type Zfs struct {
 	exec Exec
 }
 
-func ParseLocation(location string) (z *Zfs, fspath string) {
+func ParseLocation(flags Flags, location string) (z *Zfs, fspath string) {
 	colon := strings.LastIndexByte(location, ':')
 
 	if colon == -1 {
@@ -26,7 +26,7 @@ func ParseLocation(location string) (z *Zfs, fspath string) {
 		fspath = location
 	} else {
 		z = &Zfs{
-			exec: RemoteExecutor(location[:colon]),
+			exec: RemoteExecutor(flags, location[:colon]),
 		}
 		fspath = location[colon+1:]
 	}
@@ -34,8 +34,8 @@ func ParseLocation(location string) (z *Zfs, fspath string) {
 	return
 }
 
-func GetFilesystem(location string) (*Fs, error) {
-	z, fspath := ParseLocation(location)
+func GetFilesystem(flags Flags, location string) (*Fs, error) {
+	z, fspath := ParseLocation(flags, location)
 	fs, err := z.List()
 	if err != nil {
 		return nil, err
@@ -49,6 +49,11 @@ func (z *Zfs) List() (*Fs, error) {
 	cmd := z.exec("/sbin/zfs", "list", "-t", "all", "-Hr", "-o", "name")
 	b, err := cmd.Output()
 	if err != nil {
+		if e := err.(*exec.ExitError); e != nil && len(e.Stderr) > 0 {
+			// Add stderr to error message
+			err = fmt.Errorf("%s: %s", err, strings.TrimSpace(string(e.Stderr)))
+		}
+
 		return nil, err
 	}
 	return z.parseList(b), nil
@@ -75,72 +80,22 @@ func (z *Zfs) Create(fs string) error {
 	return err
 }
 
-// Recv performs the `zfs recv` command
-func (z *Zfs) Recv(fs string, sendCommand *exec.Cmd, force bool) error {
+// Send initializes a `zfs send` command
+func (z *Zfs) Send(fs string, previous, current string, dry bool) *exec.Cmd {
 
-	// Build argument list
-	args := []string{"recv"}
-	if force {
-		// -F must be passed before the filesystem argument
-		args = append(args, "-F")
-	}
-	args = append(args, fs)
+	args := []string{"send"}
 
-	recvCommand := z.exec("/sbin/zfs", args...)
-	in, _ := recvCommand.StdinPipe()
-	out, _ := sendCommand.StdoutPipe()
-
-	log.Printf("Running %s | %s\n", strings.Join(sendCommand.Args, " "), strings.Join(recvCommand.Args, " "))
-
-	var err error
-	mtx := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-
-	// Start copy routine
-	go io.Copy(in, out)
-
-	// executes a command and closes the closer on failure
-	run := func(cmd *exec.Cmd, closer io.Closer) {
-		// capture stderr
-		var stdErr bytes.Buffer
-		cmd.Stderr = &stdErr
-
-		// run the command
-		if e := cmd.Run(); e != nil {
-			mtx.Lock()
-			defer mtx.Unlock()
-
-			if err == nil {
-				// It is the first failed process
-				err = fmt.Errorf("%s failed with %v: %s", cmd.Args, e, stdErr.String())
-			}
-
-			// ensure the other process terminates
-			closer.Close()
-		}
-		wg.Done()
+	if dry {
+		args = append(args, "-nP")
 	}
 
-	// Start processes
-	go run(recvCommand, out)
-	go run(sendCommand, in)
+	if previous != "" {
+		args = append(args, "-i", fmt.Sprintf("@%s", previous))
+	}
 
-	wg.Wait()
-	return err
-}
+	args = append(args, fmt.Sprintf("%s@%s", fs, current))
 
-// Send performs the `zfs send` command
-func (z *Zfs) Send(fs string, snap string) *exec.Cmd {
-	return z.exec("/sbin/zfs", "send", fmt.Sprintf("%s@%s", fs, snap))
-}
-
-// SendIncremental performs the `zfs send -i` command
-func (z *Zfs) SendIncremental(fs string, previous, current string) *exec.Cmd {
-	return z.exec("/sbin/zfs", "send", "-i",
-		fmt.Sprintf("@%s", previous),
-		fmt.Sprintf("%s@%s", fs, current),
-	)
+	return z.exec("/sbin/zfs", args...)
 }
 
 // Returns the index of the last common snapshot
@@ -156,56 +111,6 @@ func lastCommonSnapshotIndex(listA, listB []string) int {
 	return result
 }
 
-// DoSync create missing file systems on the destination and transfers missing snapshots
-func DoSync(from, to *Fs, recursive, force bool) error {
-	log.Println("Synchronize", from.fullname, "to", to.fullname)
-
-	// any snapshots to be transferred?
-	if len(from.snaps) > 0 {
-		if len(to.snaps) > 0 {
-			common := lastCommonSnapshotIndex(from.snaps, to.snaps)
-
-			if common == -1 {
-				return fmt.Errorf("%s and %s don't have a common snapshot", from.fullname, to.fullname)
-			}
-
-			// incremental transfer of missing snapshots
-			previous := from.snaps[common]
-			missing := from.snaps[common+1:]
-
-			for _, current := range missing {
-				if err := to.Recv(from.SendIncremental(previous, current), force); err != nil {
-					return err
-				}
-				previous = current
-			}
-		} else {
-			// transfer the first snapshot
-			if err := to.Recv(from.Send(from.snaps[0]), force); err != nil {
-				return err
-			}
-		}
-	}
-
-	// synchronize the children
-	if recursive {
-		for _, fromChild := range from.Children() {
-
-			// ensure the filesystem exists
-			toChild, err := to.CreateIfMissing(fromChild.name)
-			if err != nil {
-				return err
-			}
-			err = DoSync(fromChild, toChild, recursive, force)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 func indexOf(list []string, needle string) int {
 	for i, e := range list {
 		if e == needle {
@@ -214,4 +119,21 @@ func indexOf(list []string, needle string) int {
 	}
 
 	return -1
+}
+
+func parseTransferSize(data []byte) (int64, error) {
+	buf := bytes.NewBuffer(data)
+	for {
+		line, err := buf.ReadString('\n')
+		if err != nil {
+			return 0, errors.Wrap(err, "unable to extract snapshot size")
+		}
+		if strings.HasPrefix(line, "size\t") {
+			i, err := strconv.ParseInt(line[5:len(line)-1], 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return i, nil
+		}
+	}
 }

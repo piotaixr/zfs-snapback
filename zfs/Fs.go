@@ -2,7 +2,6 @@ package zfs
 
 import (
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 )
@@ -152,19 +151,4 @@ func (f *Fs) addChild(desc string) {
 // Snapshots returns a list of all snapshots
 func (f *Fs) Snapshots() []string {
 	return f.snaps
-}
-
-// Recv performs the `zfs recv` command
-func (f *Fs) Recv(sendCommand *exec.Cmd, force bool) error {
-	return f.zfs.Recv(f.fullname, sendCommand, force)
-}
-
-// Send performs the `zfs send` command
-func (f *Fs) Send(snap string) *exec.Cmd {
-	return f.zfs.Send(f.fullname, snap)
-}
-
-// SendIncremental performs the `zfs send -i` command
-func (f *Fs) SendIncremental(previous, current string) *exec.Cmd {
-	return f.zfs.SendIncremental(f.fullname, previous, current)
 }

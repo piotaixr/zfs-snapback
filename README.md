@@ -12,6 +12,8 @@ Note that
 Flags:
 - `--recursive` or `-r`: synchronize file systems recursively and create missing file systems on the destination.
 - `--force` or `-f`: revert file systems to the most recent snapshot before receiving the data (`zfs recv -F`).
+- `--progress` or `-p`: display a progress bar for each snapshot transfer.
+- `--compression` or `-c`: set the compression for SSH (yes/no).
 
 Examples:
 

@@ -65,10 +65,25 @@ func TestParseLocation(t *testing.T) {
 	}
 
 	for _, loc := range locations {
-		_, path = ParseLocation(loc)
+		_, path = ParseLocation(Flags{}, loc)
 		// it's not possible to compare function pointers :(
 		assert.EqualValues("foo/bar", path, `for location "%s"`, loc)
 	}
+}
+
+func TestParseTransferSize(t *testing.T) {
+	assert := assert.New(t)
+
+	data, err := ioutil.ReadFile("testdata/transfer_size")
+	assert.NoError(err)
+
+	size, err := parseTransferSize(data)
+	assert.NoError(err)
+	assert.EqualValues(10862046456, size)
+
+	size, err = parseTransferSize([]byte("foobar"))
+	assert.EqualError(err, "unable to extract snapshot size: EOF")
+	assert.EqualValues(0, size)
 }
 
 func TestLastCommonSnapshotIndex(t *testing.T) {
